@@ -1,0 +1,46 @@
+{
+  "name": "heedy-cgm-plugin",
+  "version": "0.0.0",
+  "description": "",
+  "nodemonConfig": {
+    "ignore": [
+      "README.md",
+      "tests",
+      "docs",
+      "node_modules",
+      ".git",
+      "dist",
+      "testdb",
+      "frontend",
+      "package-lock.json",
+      "package.json",
+      ".gitignore",
+      "heedy",
+      "Makefile",
+      "screenshots"
+    ],
+    "ext": "*",
+    "delay": 500
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:readme": "remark -u remark-embed-images README.md -o ./dist/cgm/README.md",
+    "watch:readme": "remark -u remark-embed-images README.md -o ./dist/cgm/README.md -w",
+    "build:backend": "rsync -r --exclude README.md --exclude screenshots --exclude \".*\" --exclude Makefile --include heedy.conf --exclude \"heedy*\" --exclude tests --exclude docs --exclude node_modules --exclude package.json --exclude package-lock.json --exclude frontend --exclude testdb --exclude dist --exclude docs ./* ./dist/cgm --delete",
+    "watch:backend": "nodemon --watch . --exec \"npm run build:backend\"",
+    "build:frontend": "if test -d ./frontend; then (cd frontend; npm run build); fi",
+    "debug:frontend": "if test -d ./frontend; then (cd frontend; npm run debug); fi",
+    "watch:frontend": "if test -d ./frontend; then (cd frontend; npm run watch); fi",
+    "build": "npm run build:backend && npm run build:readme && npm run build:frontend",
+    "debug": "npm run build:backend && npm run build:readme && npm run debug:frontend",
+    "watch": "run-p 'watch:readme' 'watch:backend' 'watch:frontend'"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "nodemon": "^2.0.7",
+    "npm-run-all": "^4.1.5",
+    "remark-cli": "^9.0.0",
+    "remark-embed-images": "^2.0.0"
+  }
+}
