@@ -88,7 +88,7 @@ def xdrip_import(
             l.debug("Importing cgm_events from %s", start_timestamp)
 
         c.execute(
-            "SELECT started_at FROM Sensors WHERE started_at > ?",
+            "SELECT DISTINCT started_at FROM Sensors WHERE started_at > ? ORDER BY started_at ASC",
             (start_timestamp * 1000,),
         )
 

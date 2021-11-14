@@ -20,6 +20,7 @@ p = Plugin()
 
 
 from importers import Importer
+from syncers import Syncer
 
 importer = Importer(p)
 
@@ -29,29 +30,51 @@ tempdir = None
 l = logging.getLogger("cgm")
 
 
-@routes.post("/api/cgm/{appid}/upload")
-async def upload_data(request):
+async def validate_request(request):
     if not p.isUser(request):
-        return web.json_response(
-            {
-                "error_description": "You must be a user to access this resource",
-                "error": "access_denied",
-            },
-            status=403,
-        )
+        raise Exception("Only users allowed")
+    app = await p.apps[request.match_info["appid"]]
+
+    username = request.headers["X-Heedy-As"]
+    if username != "heedy" and app["owner"] != username:
+        raise Exception("User not owner of app")
+
+    if app["plugin"] != f"{p.name}:cgm":
+        raise Exception("App not CGM")
+
+    return app
+
+
+@routes.post("/api/cgm/{appid}/sync")
+async def sync(request):
     try:
-        app = await p.apps[request.match_info["appid"]]
-
-        username = request.headers["X-Heedy-As"]
-        if username != "heedy" and app["owner"] != username:
-            raise Exception("User not owner of app")
-
-        if app["plugin"] != f"{p.name}:cgm":
-            raise Exception("App not CGM")
-
+        app = await validate_request(request)
     except:
         return web.json_response(
-            {"error": "not_found", "error_description": "App not found"}, status=400
+            {"error": "not_found", "error_description": "App not found"}, status=403
+        )
+    l.debug("Sync request for %s", app["id"])
+    await app.notify(
+        "syncer",
+        "CGM: Syncing...",
+        type="info",
+        _global=False,
+        description="",
+        seen=False,
+    )
+    await Syncer.sync(app)
+    # data = await request.json()
+    # l.debug(data)
+    return web.json_response({"result": "ok"})
+
+
+@routes.post("/api/cgm/{appid}/import")
+async def import_data(request):
+    try:
+        app = await validate_request(request)
+    except:
+        return web.json_response(
+            {"error": "not_found", "error_description": "App not found"}, status=403
         )
 
     l.debug("Data import request")
@@ -154,17 +177,18 @@ async def create(request):
 
     await app.notify(
         "cgm",
-        "CGM App Actions",
+        "CGM",
         dismissible=False,
+        type="toolbar",
         actions=[
             {
-                "href": f"/api/cgm/{evt['app']}/upload",
-                "title": "Upload Data",
+                "href": f"/api/cgm/{evt['app']}/import",
+                "title": "Import Data",
                 "type": "post/form-data",
                 "form_schema": {
                     "data_type": {
                         "type": "string",
-                        "title": "Upload Data Format",
+                        "title": "Import Data Format",
                         "oneOf": [
                             {"const": "xdrip", "title": "XDrip+ Database Export"}
                         ],
@@ -173,8 +197,8 @@ async def create(request):
                     "overwrite": {
                         "type": "boolean",
                         "default": False,
-                        "title": "Overwrite Existing Data",
-                        "description": "If set, the uploaded data will replace whatever is in heedy at the time ranges. If not, only data that is newer than existing datapoints will be appended.",
+                        "title": "Import Old Data (Overwrite on Conflict)",
+                        "description": "If set, the entire dataset will be inserted, overwriting any datapoints that have identical timestamps. If not, only data that is newer than existing datapoints will be appended.",
                     },
                     "data": {
                         "type": "object",
@@ -190,9 +214,23 @@ You can upload data exported from a supported service directly into heedy. Curre
 
 - [XDrip+](https://github.com/jamorham/xDrip-plus) - click on `... > Import/Export Features > Export Database`, and upload the resulting zip file here.
 """,
-            }
+            },
+            {
+                "href": f"/api/cgm/{evt['app']}/sync",
+                "title": "Sync Now",
+                "type": "post",
+            },
         ],
     )
+
+    return web.Response(text="ok")
+
+
+@routes.post("/settings_update")
+async def settings_update(request):
+    evt = await request.json()
+    l.debug("Settings update: %s", evt)
+
     return web.Response(text="ok")
 
 
@@ -202,10 +240,38 @@ async def cleanup(app):
     if tempdir is not None:
         shutil.rmtree(tempdir)
         tempdir = None
+    await p.session.close()
+
+
+async def sync_all():
+    l.debug("Starting sync of all CGM services")
+    applist = await p.apps(plugin=f"{p.name}:{p.name}")
+    for a in applist:
+        if len(a["settings"]["sync_services"]) > 0:
+            await Syncer.sync(a)
+
+
+async def sync_loop():
+    l.debug("Waiting 14 seconds before first sync")
+    await asyncio.sleep(14)
+    while True:
+        try:
+            await sync_all()
+        except Exception as e:
+            l.error(e)
+
+        wait_until = p.config["config"]["plugin"][p.name]["config"]["sync_every"]
+        l.debug(f"Waiting {wait_until} seconds until next auto-sync initiated")
+        await asyncio.sleep(wait_until)
+
+
+async def startup(app):
+    asyncio.create_task(sync_loop())
 
 
 # Runs the plugin's backend server
 app = web.Application()
 app.add_routes(routes)
+app.on_startup.append(startup)
 app.on_shutdown.append(cleanup)
 web.run_app(app, path=f"{p.name}.sock")
