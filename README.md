@@ -1,7 +1,7 @@
 # Heedy CGM Plugin
 
 This plugin provides integration of heedy (>=0.4.1) with the glucose monitoring ecosystem.
-After installing the plugin, add the `Glucose Monitor` app to your user using the add app dialog, and then you can import data, or set up services to sync with Heedy (in plugin settings,).
+After installing the plugin, add the `Glucose Monitor` app to your user using the add app dialog, and then you can import data, or set up services to sync with Heedy (in plugin settings).
 
 ![App View](./screenshots/main.png)
 
