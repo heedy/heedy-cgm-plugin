@@ -19,6 +19,7 @@ routes = web.RouteTableDef()
 p = Plugin()
 
 
+logging.basicConfig(level=logging.DEBUG)
 from importers import Importer
 from syncers import Syncer
 
@@ -36,7 +37,7 @@ async def validate_request(request):
     app = await p.apps[request.match_info["appid"]]
 
     username = request.headers["X-Heedy-As"]
-    if username != "heedy" and app["owner"] != username:
+    if username != "heedy" and app["owner"].username != username:
         raise Exception("User not owner of app")
 
     if app["plugin"] != f"{p.name}:cgm":
@@ -50,6 +51,7 @@ async def sync(request):
     try:
         app = await validate_request(request)
     except:
+        l.exception("Error validating request")
         return web.json_response(
             {"error": "not_found", "error_description": "App not found"}, status=403
         )
@@ -72,7 +74,8 @@ async def sync(request):
 async def import_data(request):
     try:
         app = await validate_request(request)
-    except:
+    except Exception as e:
+        l.exception("Error validating request")
         return web.json_response(
             {"error": "not_found", "error_description": "App not found"}, status=403
         )

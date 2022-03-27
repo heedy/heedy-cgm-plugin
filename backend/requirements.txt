@@ -1,2 +1,2 @@
-heedy>=0.1.4
+heedy>=0.2.0
 aiohttp
